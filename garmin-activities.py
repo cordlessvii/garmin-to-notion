@@ -33,12 +33,15 @@ def determine_run_type(activity):
     name = activity.get('activityName', '').lower()
     distance_mi = activity.get('distance', 0) / 1609.34
 
-    if "speedwork" in name or "speed work" in name:
+    if "speedwork" in name:
         return "Interval"
     elif distance_mi >= 6:
         return "Long"
     else:
         return "Easy"
+
+def get_all_activities(garmin, limit=1000):
+    return garmin.get_activities(0, limit)
 
 def format_activity_type(activity_type, activity_name=""):
     formatted_type = activity_type.replace('_', ' ').title() if activity_type else "Unknown"
@@ -69,6 +72,9 @@ def format_activity_type(activity_type, activity_name=""):
         return "Stretching", "Stretching"
     return activity_type, activity_subtype
 
+def format_entertainment(activity_name):
+    return activity_name.replace('ENTERTAINMENT', 'Netflix')
+
 def format_training_message(message):
     messages = {
         'NO_': 'No Benefit',
@@ -97,12 +103,60 @@ def format_pace(average_speed):
     else:
         return ""
 
-def get_all_activities(garmin, limit=1000):
-    return garmin.get_activities(0, limit)
+def activity_exists(client, database_id, activity_date, activity_type, activity_name):
+    if isinstance(activity_type, tuple):
+        main_type, _ = activity_type
+    else:
+        main_type = activity_type[0] if isinstance(activity_type, (list, tuple)) else activity_type
+    lookup_type = "Stretching" if "stretch" in activity_name.lower() else main_type
+    query = client.databases.query(
+        database_id=database_id,
+        filter={
+            "and": [
+                {"property": "Date", "date": {"equals": activity_date.split('T')[0]}},
+                {"property": "Activity Type", "select": {"equals": lookup_type}},
+                {"property": "Activity Name", "title": {"equals": activity_name}}
+            ]
+        }
+    )
+    results = query['results']
+    return results[0] if results else None
+
+def activity_needs_update(existing_activity, new_activity):
+    existing_props = existing_activity['properties']
+    activity_name = new_activity.get('activityName', '').lower()
+    activity_type, activity_subtype = format_activity_type(
+        new_activity.get('activityType', {}).get('typeKey', 'Unknown'),
+        activity_name
+    )
+    has_subactivity = (
+        'Subactivity Type' in existing_props and 
+        existing_props['Subactivity Type'] is not None and
+        existing_props['Subactivity Type'].get('select') is not None
+    )
+    return (
+        existing_props['Distance (mi)']['number'] != round(new_activity.get('distance', 0) / 1609.34, 2) or
+        existing_props['Duration (min)']['number'] != round(new_activity.get('duration', 0) / 60, 2) or
+        existing_props['Calories']['number'] != round(new_activity.get('calories', 0)) or
+        existing_props['Avg Pace']['rich_text'][0]['text']['content'] != format_pace(new_activity.get('averageSpeed', 0)) or
+        existing_props['Avg Power']['number'] != round(new_activity.get('avgPower', 0), 1) or
+        existing_props['Max Power']['number'] != round(new_activity.get('maxPower', 0), 1) or
+        existing_props['Training Effect']['select']['name'] != format_training_effect(new_activity.get('trainingEffectLabel', 'Unknown')) or
+        existing_props['Aerobic']['number'] != round(new_activity.get('aerobicTrainingEffect', 0), 1) or
+        existing_props['Aerobic Effect']['select']['name'] != format_training_message(new_activity.get('aerobicTrainingEffectMessage', 'Unknown')) or
+        existing_props['Anaerobic']['number'] != round(new_activity.get('anaerobicTrainingEffect', 0), 1) or
+        existing_props['Anaerobic Effect']['select']['name'] != format_training_message(new_activity.get('anaerobicTrainingEffectMessage', 'Unknown')) or
+        existing_props['PR']['checkbox'] != new_activity.get('pr', False) or
+        existing_props['Fav']['checkbox'] != new_activity.get('favorite', False) or
+        existing_props['Activity Type']['select']['name'] != activity_type or
+        existing_props['Run Type']['select']['name'] != determine_run_type(new_activity) or
+        (has_subactivity and existing_props['Subactivity Type']['select']['name'] != activity_subtype) or
+        (not has_subactivity)
+    )
 
 def create_activity(client, database_id, activity):
     activity_date = activity.get('startTimeGMT')
-    activity_name = activity.get('activityName', 'Unnamed Activity')
+    activity_name = format_entertainment(activity.get('activityName', 'Unnamed Activity'))
     activity_type, activity_subtype = format_activity_type(
         activity.get('activityType', {}).get('typeKey', 'Unknown'),
         activity_name
@@ -130,11 +184,44 @@ def create_activity(client, database_id, activity):
     }
     page = {
         "parent": {"database_id": database_id},
-        "properties": properties
+        "properties": properties,
     }
     if icon_url:
         page["icon"] = {"type": "external", "external": {"url": icon_url}}
     client.pages.create(**page)
+
+def update_activity(client, existing_activity, new_activity):
+    activity_name = new_activity.get('activityName', 'Unnamed Activity')
+    activity_type, activity_subtype = format_activity_type(
+        new_activity.get('activityType', {}).get('typeKey', 'Unknown'),
+        activity_name
+    )
+    icon_url = ACTIVITY_ICONS.get(activity_subtype if activity_subtype != activity_type else activity_type)
+    properties = {
+        "Activity Type": {"select": {"name": activity_type}},
+        "Subactivity Type": {"select": {"name": activity_subtype}},
+        "Distance (mi)": {"number": round(new_activity.get('distance', 0) / 1609.34, 2)},
+        "Duration (min)": {"number": round(new_activity.get('duration', 0) / 60, 2)},
+        "Calories": {"number": round(new_activity.get('calories', 0))},
+        "Avg Pace": {"rich_text": [{"text": {"content": format_pace(new_activity.get('averageSpeed', 0))}}]},
+        "Avg Power": {"number": round(new_activity.get('avgPower', 0), 1)},
+        "Max Power": {"number": round(new_activity.get('maxPower', 0), 1)},
+        "Training Effect": {"select": {"name": format_training_effect(new_activity.get('trainingEffectLabel', 'Unknown'))}},
+        "Aerobic": {"number": round(new_activity.get('aerobicTrainingEffect', 0), 1)},
+        "Aerobic Effect": {"select": {"name": format_training_message(new_activity.get('aerobicTrainingEffectMessage', 'Unknown'))}},
+        "Anaerobic": {"number": round(new_activity.get('anaerobicTrainingEffect', 0), 1)},
+        "Anaerobic Effect": {"select": {"name": format_training_message(new_activity.get('anaerobicTrainingEffectMessage', 'Unknown'))}},
+        "PR": {"checkbox": new_activity.get('pr', False)},
+        "Fav": {"checkbox": new_activity.get('favorite', False)},
+        "Run Type": {"select": {"name": determine_run_type(new_activity)}}
+    }
+    update = {
+        "page_id": existing_activity['id'],
+        "properties": properties,
+    }
+    if icon_url:
+        update["icon"] = {"type": "external", "external": {"url": icon_url}}
+    client.pages.update(**update)
 
 def main():
     load_dotenv()
@@ -142,34 +229,21 @@ def main():
     garmin_password = os.getenv("GARMIN_PASSWORD")
     notion_token = os.getenv("NOTION_TOKEN")
     database_id = os.getenv("NOTION_DB_ID")
-
     garmin = Garmin(garmin_email, garmin_password)
     garmin.login()
     client = Client(auth=notion_token)
     activities = get_all_activities(garmin)
-
     for activity in activities:
         activity_date = activity.get('startTimeGMT')
-        activity_name = activity.get('activityName', '').lower()
-
-        if "strength" in activity_name:
-            continue
-
-        activity_name = format_entertainment(activity_name)
+        activity_name = format_entertainment(activity.get('activityName', 'Unnamed Activity'))
         activity_type, activity_subtype = format_activity_type(
             activity.get('activityType', {}).get('typeKey', 'Unknown'),
             activity_name
         )
-
-        existing_activity = None
-        try:
-            existing_activity = activity_exists(client, database_id, activity_date, activity_type, activity_name)
-        except:
-            pass
-
+        existing_activity = activity_exists(client, database_id, activity_date, activity_type, activity_name)
         if existing_activity:
-            # Optional: implement update_activity if needed
-            pass
+            if activity_needs_update(existing_activity, activity):
+                update_activity(client, existing_activity, activity)
         else:
             create_activity(client, database_id, activity)
 
