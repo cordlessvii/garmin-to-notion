@@ -40,9 +40,6 @@ def determine_run_type(activity):
     else:
         return "Easy"
 
-def get_all_activities(garmin, limit=1000):
-    return garmin.get_activities(0, limit)
-
 def format_activity_type(activity_type, activity_name=""):
     formatted_type = activity_type.replace('_', ' ').title() if activity_type else "Unknown"
     activity_subtype = formatted_type
@@ -72,9 +69,6 @@ def format_activity_type(activity_type, activity_name=""):
         return "Stretching", "Stretching"
     return activity_type, activity_subtype
 
-def format_entertainment(activity_name):
-    return activity_name.replace('ENTERTAINMENT', 'Netflix')
-
 def format_training_message(message):
     messages = {
         'NO_': 'No Benefit',
@@ -103,24 +97,44 @@ def format_pace(average_speed):
     else:
         return ""
 
-def activity_exists(client, database_id, activity_date, activity_type, activity_name):
-    if isinstance(activity_type, tuple):
-        main_type, _ = activity_type
-    else:
-        main_type = activity_type[0] if isinstance(activity_type, (list, tuple)) else activity_type
-    lookup_type = "Stretching" if "stretch" in activity_name.lower() else main_type
-    query = client.databases.query(
-        database_id=database_id,
-        filter={
-            "and": [
-                {"property": "Date", "date": {"equals": activity_date.split('T')[0]}},
-                {"property": "Activity Type", "select": {"equals": lookup_type}},
-                {"property": "Activity Name", "title": {"equals": activity_name}}
-            ]
-        }
+def get_all_activities(garmin, limit=1000):
+    return garmin.get_activities(0, limit)
+
+def create_activity(client, database_id, activity):
+    activity_date = activity.get('startTimeGMT')
+    activity_name = activity.get('activityName', 'Unnamed Activity')
+    activity_type, activity_subtype = format_activity_type(
+        activity.get('activityType', {}).get('typeKey', 'Unknown'),
+        activity_name
     )
-    results = query['results']
-    return results[0] if results else None
+    icon_url = ACTIVITY_ICONS.get(activity_subtype if activity_subtype != activity_type else activity_type)
+    properties = {
+        "Date": {"date": {"start": activity_date}},
+        "Activity Type": {"select": {"name": activity_type}},
+        "Subactivity Type": {"select": {"name": activity_subtype}},
+        "Activity Name": {"title": [{"text": {"content": activity_name}}]},
+        "Distance (mi)": {"number": round(activity.get('distance', 0) / 1609.34, 2)},
+        "Duration (min)": {"number": round(activity.get('duration', 0) / 60, 2)},
+        "Calories": {"number": round(activity.get('calories', 0))},
+        "Avg Pace": {"rich_text": [{"text": {"content": format_pace(activity.get('averageSpeed', 0))}}]},
+        "Avg Power": {"number": round(activity.get('avgPower', 0), 1)},
+        "Max Power": {"number": round(activity.get('maxPower', 0), 1)},
+        "Training Effect": {"select": {"name": format_training_effect(activity.get('trainingEffectLabel', 'Unknown'))}},
+        "Aerobic": {"number": round(activity.get('aerobicTrainingEffect', 0), 1)},
+        "Aerobic Effect": {"select": {"name": format_training_message(activity.get('aerobicTrainingEffectMessage', 'Unknown'))}},
+        "Anaerobic": {"number": round(activity.get('anaerobicTrainingEffect', 0), 1)},
+        "Anaerobic Effect": {"select": {"name": format_training_message(activity.get('anaerobicTrainingEffectMessage', 'Unknown'))}},
+        "PR": {"checkbox": activity.get('pr', False)},
+        "Fav": {"checkbox": activity.get('favorite', False)},
+        "Run Type": {"select": {"name": determine_run_type(activity)}}
+    }
+    page = {
+        "parent": {"database_id": database_id},
+        "properties": properties
+    }
+    if icon_url:
+        page["icon"] = {"type": "external", "external": {"url": icon_url}}
+    client.pages.create(**page)
 
 def main():
     load_dotenv()
@@ -136,22 +150,26 @@ def main():
 
     for activity in activities:
         activity_date = activity.get('startTimeGMT')
-        activity_name = format_entertainment(activity.get('activityName', 'Unnamed Activity'))
+        activity_name = activity.get('activityName', '').lower()
 
-        # ⛔ Skip if it's a Strength activity
-        if "strength" in activity_name.lower():
+        if "strength" in activity_name:
             continue
 
+        activity_name = format_entertainment(activity_name)
         activity_type, activity_subtype = format_activity_type(
             activity.get('activityType', {}).get('typeKey', 'Unknown'),
             activity_name
         )
 
-        existing_activity = activity_exists(client, database_id, activity_date, activity_type, activity_name)
+        existing_activity = None
+        try:
+            existing_activity = activity_exists(client, database_id, activity_date, activity_type, activity_name)
+        except:
+            pass
 
         if existing_activity:
-            if activity_needs_update(existing_activity, activity):
-                update_activity(client, existing_activity, activity)
+            # Optional: implement update_activity if needed
+            pass
         else:
             create_activity(client, database_id, activity)
 
