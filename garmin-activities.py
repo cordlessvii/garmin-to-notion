@@ -29,6 +29,17 @@ ACTIVITY_ICONS = {
     "Yoga": "https://img.icons8.com/?size=100&id=9783&format=png&color=000000",
 }
 
+def determine_run_type(activity):
+    name = activity.get('activityName', '').lower()
+    distance_mi = activity.get('distance', 0) / 1609.34
+
+    if "speedwork" in name:
+        return "Interval"
+    elif distance_mi >= 6:
+        return "Long"
+    else:
+        return "Easy"
+
 def get_all_activities(garmin, limit=1000):
     return garmin.get_activities(0, limit)
 
@@ -85,7 +96,7 @@ def format_training_effect(trainingEffect_label):
 
 def format_pace(average_speed):
     if average_speed > 0:
-        pace_min_mi = 1609.34 / (average_speed * 60)  # Convert to min/mi
+        pace_min_mi = 1609.34 / (average_speed * 60)
         minutes = int(pace_min_mi)
         seconds = int((pace_min_mi - minutes) * 60)
         return f"{minutes}:{seconds:02d} min/mi"
@@ -138,6 +149,7 @@ def activity_needs_update(existing_activity, new_activity):
         existing_props['PR']['checkbox'] != new_activity.get('pr', False) or
         existing_props['Fav']['checkbox'] != new_activity.get('favorite', False) or
         existing_props['Activity Type']['select']['name'] != activity_type or
+        existing_props['Run Type']['select']['name'] != determine_run_type(new_activity) or
         (has_subactivity and existing_props['Subactivity Type']['select']['name'] != activity_subtype) or
         (not has_subactivity)
     )
@@ -167,7 +179,8 @@ def create_activity(client, database_id, activity):
         "Anaerobic": {"number": round(activity.get('anaerobicTrainingEffect', 0), 1)},
         "Anaerobic Effect": {"select": {"name": format_training_message(activity.get('anaerobicTrainingEffectMessage', 'Unknown'))}},
         "PR": {"checkbox": activity.get('pr', False)},
-        "Fav": {"checkbox": activity.get('favorite', False)}
+        "Fav": {"checkbox": activity.get('favorite', False)},
+        "Run Type": {"select": {"name": determine_run_type(activity)}}
     }
     page = {
         "parent": {"database_id": database_id},
@@ -199,7 +212,8 @@ def update_activity(client, existing_activity, new_activity):
         "Anaerobic": {"number": round(new_activity.get('anaerobicTrainingEffect', 0), 1)},
         "Anaerobic Effect": {"select": {"name": format_training_message(new_activity.get('anaerobicTrainingEffectMessage', 'Unknown'))}},
         "PR": {"checkbox": new_activity.get('pr', False)},
-        "Fav": {"checkbox": new_activity.get('favorite', False)}
+        "Fav": {"checkbox": new_activity.get('favorite', False)},
+        "Run Type": {"select": {"name": determine_run_type(new_activity)}}
     }
     update = {
         "page_id": existing_activity['id'],
