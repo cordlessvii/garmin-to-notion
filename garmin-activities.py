@@ -1,92 +1,41 @@
-from datetime import datetime, timezone
+from datetime import date, datetime
 from garminconnect import Garmin
 from notion_client import Client
-from dotenv import load_dotenv
-import pytz
 import os
 
-# Your local time zone, replace with the appropriate one if needed
-local_tz = pytz.timezone('America/Toronto')
-
-ACTIVITY_ICONS = {
-    "Barre": "https://img.icons8.com/?size=100&id=66924&format=png&color=000000",
-    "Breathwork": "https://img.icons8.com/?size=100&id=9798&format=png&color=000000",
-    "Cardio": "https://img.icons8.com/?size=100&id=71221&format=png&color=000000",
-    "Cycling": "https://img.icons8.com/?size=100&id=47443&format=png&color=000000",
-    "Hiking": "https://img.icons8.com/?size=100&id=9844&format=png&color=000000",
-    "Indoor Cardio": "https://img.icons8.com/?size=100&id=62779&format=png&color=000000",
-    "Indoor Cycling": "https://img.icons8.com/?size=100&id=47443&format=png&color=000000",
-    "Indoor Rowing": "https://img.icons8.com/?size=100&id=71098&format=png&color=000000",
-    "Pilates": "https://img.icons8.com/?size=100&id=9774&format=png&color=000000",
-    "Meditation": "https://img.icons8.com/?size=100&id=9798&format=png&color=000000",
-    "Rowing": "https://img.icons8.com/?size=100&id=71491&format=png&color=000000",
-    "Running": "https://img.icons8.com/?size=100&id=k1l1XFkME39t&format=png&color=000000",
-    "Strength Training": "https://img.icons8.com/?size=100&id=107640&format=png&color=000000",
-    "Stretching": "https://img.icons8.com/?size=100&id=djfOcRn1m_kh&format=png&color=000000",
-    "Swimming": "https://img.icons8.com/?size=100&id=9777&format=png&color=000000",
-    "Treadmill Running": "https://img.icons8.com/?size=100&id=9794&format=png&color=000000",
-    "Walking": "https://img.icons8.com/?size=100&id=9807&format=png&color=000000",
-    "Yoga": "https://img.icons8.com/?size=100&id=9783&format=png&color=000000",
-}
-
-def get_all_activities(garmin, limit=1000):
-    return garmin.get_activities(0, limit)
-
-def format_activity_type(activity_type, activity_name=""):
-    formatted_type = activity_type.replace('_', ' ').title() if activity_type else "Unknown"
-    activity_subtype = formatted_type
-    activity_type = formatted_type
-
-    activity_mapping = {
-        "Barre": "Strength",
-        "Indoor Cardio": "Cardio",
-        "Indoor Cycling": "Cycling",
-        "Indoor Rowing": "Rowing",
-        "Speed Walking": "Walking",
-        "Strength Training": "Strength",
-        "Treadmill Running": "Running"
+def get_icon_for_record(activity_name):
+    icon_map = {
+        "1K": "🥇",
+        "1mi": "⚡",
+        "5K": "👟",
+        "10K": "⭐",
+        "Longest Run": "🏃",
+        "Longest Ride": "🚴",
+        "Total Ascent": "🚵",
+        "Max Avg Power (20 min)": "🔋",
+        "Most Steps in a Day": "👣",
+        "Most Steps in a Week": "🚶",
+        "Most Steps in a Month": "📅",
+        "Longest Goal Streak": "✔️",
+        "Other": "🏅"
     }
+    return icon_map.get(activity_name, "🏅")
 
-    if formatted_type == "Rowing V2":
-        activity_type = "Rowing"
-    elif formatted_type in ["Yoga", "Pilates"]:
-        activity_type = "Yoga/Pilates"
-        activity_subtype = formatted_type
-
-    if formatted_type in activity_mapping:
-        activity_type = activity_mapping[formatted_type]
-        activity_subtype = formatted_type
-
-    if activity_name and "meditation" in activity_name.lower():
-        return "Meditation", "Meditation"
-    if activity_name and "barre" in activity_name.lower():
-        return "Strength", "Barre"
-    if activity_name and "stretch" in activity_name.lower():
-        return "Stretching", "Stretching"
-
-    return activity_type, activity_subtype
-
-def format_entertainment(activity_name):
-    return activity_name.replace('ENTERTAINMENT', 'Netflix')
-
-def format_training_message(message):
-    messages = {
-        'NO_': 'No Benefit',
-        'MINOR_': 'Some Benefit',
-        'RECOVERY_': 'Recovery',
-        'MAINTAINING_': 'Maintaining',
-        'IMPROVING_': 'Impacting',
-        'IMPACTING_': 'Impacting',
-        'HIGHLY_': 'Highly Impacting',
-        'OVERREACHING_': 'Overreaching'
+def get_cover_for_record(activity_name):
+    cover_map = {
+        "1K": "https://images.unsplash.com/photo-1526676537331-7747bf8278fc",
+        "1mi": "https://images.unsplash.com/photo-1638183395699-2c0db5b6afbb",
+        "5K": "https://images.unsplash.com/photo-1571008887538-b36bb32f4571",
+        "10K": "https://images.unsplash.com/photo-1529339944280-1a37d3d6fa8c",
+        "Longest Run": "https://images.unsplash.com/photo-1532383282788-19b341e3c422",
+        "Longest Ride": "https://images.unsplash.com/photo-1471506480208-91b3a4cc78be",
+        "Max Avg Power (20 min)": "https://images.unsplash.com/photo-1591741535018-d042766c62eb",
+        "Most Steps in a Day": "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8",
+        "Most Steps in a Week": "https://images.unsplash.com/photo-1602174865963-9159ed37e8f1",
+        "Most Steps in a Month": "https://images.unsplash.com/photo-1580058572462-98e2c0e0e2f0",
+        "Longest Goal Streak": "https://images.unsplash.com/photo-1477332552946-cfb384aeaf1c"
     }
-    for key, value in messages.items():
-        if message.startswith(key):
-            return value
-    return message
-
-def format_training_effect(trainingEffect_label):
-    return trainingEffect_label.replace('_', ' ').title()
+    return cover_map.get(activity_name, "https://images.unsplash.com/photo-1471506480208-91b3a4cc78be")
 
 def format_pace(average_speed):
     if average_speed > 0:
@@ -98,163 +47,59 @@ def format_pace(average_speed):
     else:
         return ""
 
-def activity_exists(client, database_id, activity_date, activity_type, activity_name):
-    if isinstance(activity_type, tuple):
-        main_type, _ = activity_type
-    else:
-        main_type = activity_type[0] if isinstance(activity_type, (list, tuple)) else activity_type
+def format_garmin_value(value, activity_type, typeId):
+    if typeId == 1:  # 1K
+        total_seconds = round(value)
+        minutes = total_seconds // 60
+        seconds = total_seconds % 60
+        formatted_value = f"{minutes}:{seconds:02d}"
+        pace = format_pace(1000 / value) if value > 0 else ""
+        return formatted_value, pace
 
-    lookup_type = "Stretching" if "stretch" in activity_name.lower() else main_type
+    if typeId == 2:  # 1mile
+        total_seconds = round(value)
+        minutes = total_seconds // 60
+        seconds = total_seconds % 60
+        formatted_value = f"{minutes}:{seconds:02d}"
+        return formatted_value, ""
 
-    query = client.databases.query(
-        database_id=database_id,
-        filter={
-            "and": [
-                {"property": "Date", "date": {"equals": activity_date.split('T')[0]}},
-                {"property": "Activity Type", "select": {"equals": lookup_type}},
-                {"property": "Activity Name", "title": {"equals": activity_name}}
-            ]
-        }
-    )
-    results = query['results']
-    return results[0] if results else None
+    if typeId == 3:  # 5K
+        total_seconds = round(value)
+        minutes = total_seconds // 60
+        seconds = total_seconds % 60
+        formatted_value = f"{minutes}:{seconds:02d}"
+        pace = format_pace((5000 / value)) if value > 0 else ""
+        return formatted_value, pace
 
-def activity_needs_update(existing_activity, new_activity):
-    existing_props = existing_activity['properties']
-    activity_name = new_activity.get('activityName', '').lower()
-    activity_type, activity_subtype = format_activity_type(
-        new_activity.get('activityType', {}).get('typeKey', 'Unknown'),
-        activity_name
-    )
+    if typeId == 4:  # 10K
+        total_seconds = round(value)
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        formatted_value = f"{hours}:{minutes:02d}:{seconds:02d}" if hours > 0 else f"{minutes}:{seconds:02d}"
+        pace = format_pace((10000 / value)) if value > 0 else ""
+        return formatted_value, pace
 
-    has_subactivity = (
-        'Subactivity Type' in existing_props and 
-        existing_props['Subactivity Type'] is not None and
-        existing_props['Subactivity Type'].get('select') is not None
-    )
+    if typeId in [7, 8]:  # Longest Run or Ride
+        value_mi = value / 1609.34
+        formatted_value = f"{value_mi:.2f} mi"
+        return formatted_value, ""
 
-    return (
-        existing_props['Distance (km)']['number'] != round(new_activity.get('distance', 0) / 1609.34, 2) or
-        existing_props['Duration (min)']['number'] != round(new_activity.get('duration', 0) / 60, 2) or
-        existing_props['Calories']['number'] != round(new_activity.get('calories', 0)) or
-        existing_props['Avg Pace']['rich_text'][0]['text']['content'] != format_pace(new_activity.get('averageSpeed', 0)) or
-        existing_props['Avg Power']['number'] != round(new_activity.get('avgPower', 0), 1) or
-        existing_props['Max Power']['number'] != round(new_activity.get('maxPower', 0), 1) or
-        existing_props['Training Effect']['select']['name'] != format_training_effect(new_activity.get('trainingEffectLabel', 'Unknown')) or
-        existing_props['Aerobic']['number'] != round(new_activity.get('aerobicTrainingEffect', 0), 1) or
-        existing_props['Aerobic Effect']['select']['name'] != format_training_message(new_activity.get('aerobicTrainingEffectMessage', 'Unknown')) or
-        existing_props['Anaerobic']['number'] != round(new_activity.get('anaerobicTrainingEffect', 0), 1) or
-        existing_props['Anaerobic Effect']['select']['name'] != format_training_message(new_activity.get('anaerobicTrainingEffectMessage', 'Unknown')) or
-        existing_props['PR']['checkbox'] != new_activity.get('pr', False) or
-        existing_props['Fav']['checkbox'] != new_activity.get('favorite', False) or
-        existing_props['Activity Type']['select']['name'] != activity_type or
-        (has_subactivity and existing_props['Subactivity Type']['select']['name'] != activity_subtype) or
-        (not has_subactivity)
-    )
+    if typeId == 9:
+        return f"{int(value):,} m", ""
+    if typeId == 10:
+        return f"{round(value)} W", ""
+    if typeId in [12, 13, 14]:
+        return f"{round(value):,}", ""
+    if typeId == 15:
+        return f"{round(value)} days", ""
 
-def create_activity(client, database_id, activity):
-    activity_date = activity.get('startTimeGMT')
-    activity_name = format_entertainment(activity.get('activityName', 'Unnamed Activity'))
-    activity_type, activity_subtype = format_activity_type(
-        activity.get('activityType', {}).get('typeKey', 'Unknown'),
-        activity_name
-    )
-    icon_url = ACTIVITY_ICONS.get(activity_subtype if activity_subtype != activity_type else activity_type)
+    minutes = int(value // 60)
+    seconds = round((value / 60 - minutes) * 60, 2)
+    formatted_value = f"{minutes}:{seconds:05.2f}" if value < 3600 else f"{int(value // 3600)}:{int((value % 3600) // 60):02}:{round(value % 60, 2):05.2f}"
+    return formatted_value, ""
 
-    properties = {
-        "Date": {"date": {"start": activity_date}},
-        "Activity Type": {"select": {"name": activity_type}},
-        "Subactivity Type": {"select": {"name": activity_subtype}},
-        "Activity Name": {"title": [{"text": {"content": activity_name}}]},
-        "Distance (km)": {"number": round(activity.get('distance', 0) / 1609.34, 2)},
-        "Duration (min)": {"number": round(activity.get('duration', 0) / 60, 2)},
-        "Calories": {"number": round(activity.get('calories', 0))},
-        "Avg Pace": {"rich_text": [{"text": {"content": format_pace(activity.get('averageSpeed', 0))}}]},
-        "Avg Power": {"number": round(activity.get('avgPower', 0), 1)},
-        "Max Power": {"number": round(activity.get('maxPower', 0), 1)},
-        "Training Effect": {"select": {"name": format_training_effect(activity.get('trainingEffectLabel', 'Unknown'))}},
-        "Aerobic": {"number": round(activity.get('aerobicTrainingEffect', 0), 1)},
-        "Aerobic Effect": {"select": {"name": format_training_message(activity.get('aerobicTrainingEffectMessage', 'Unknown'))}},
-        "Anaerobic": {"number": round(activity.get('anaerobicTrainingEffect', 0), 1)},
-        "Anaerobic Effect": {"select": {"name": format_training_message(activity.get('anaerobicTrainingEffectMessage', 'Unknown'))}},
-        "PR": {"checkbox": activity.get('pr', False)},
-        "Fav": {"checkbox": activity.get('favorite', False)}
-    }
-
-    page = {
-        "parent": {"database_id": database_id},
-        "properties": properties,
-    }
-
-    if icon_url:
-        page["icon"] = {"type": "external", "external": {"url": icon_url}}
-
-    client.pages.create(**page)
-
-def update_activity(client, existing_activity, new_activity):
-    activity_name = new_activity.get('activityName', 'Unnamed Activity')
-    activity_type, activity_subtype = format_activity_type(
-        new_activity.get('activityType', {}).get('typeKey', 'Unknown'),
-        activity_name
-    )
-    icon_url = ACTIVITY_ICONS.get(activity_subtype if activity_subtype != activity_type else activity_type)
-
-    properties = {
-        "Activity Type": {"select": {"name": activity_type}},
-        "Subactivity Type": {"select": {"name": activity_subtype}},
-        "Distance (km)": {"number": round(new_activity.get('distance', 0) / 1609.34, 2)},
-        "Duration (min)": {"number": round(new_activity.get('duration', 0) / 60, 2)},
-        "Calories": {"number": round(new_activity.get('calories', 0))},
-        "Avg Pace": {"rich_text": [{"text": {"content": format_pace(new_activity.get('averageSpeed', 0))}}]},
-        "Avg Power": {"number": round(new_activity.get('avgPower', 0), 1)},
-        "Max Power": {"number": round(new_activity.get('maxPower', 0), 1)},
-        "Training Effect": {"select": {"name": format_training_effect(new_activity.get('trainingEffectLabel', 'Unknown'))}},
-        "Aerobic": {"number": round(new_activity.get('aerobicTrainingEffect', 0), 1)},
-        "Aerobic Effect": {"select": {"name": format_training_message(new_activity.get('aerobicTrainingEffectMessage', 'Unknown'))}},
-        "Anaerobic": {"number": round(new_activity.get('anaerobicTrainingEffect', 0), 1)},
-        "Anaerobic Effect": {"select": {"name": format_training_message(new_activity.get('anaerobicTrainingEffectMessage', 'Unknown'))}},
-        "PR": {"checkbox": new_activity.get('pr', False)},
-        "Fav": {"checkbox": new_activity.get('favorite', False)}
-    }
-
-    update = {
-        "page_id": existing_activity['id'],
-        "properties": properties,
-    }
-
-    if icon_url:
-        update["icon"] = {"type": "external", "external": {"url": icon_url}}
-
-    client.pages.update(**update)
-
-def main():
-    load_dotenv()
-    garmin_email = os.getenv("GARMIN_EMAIL")
-    garmin_password = os.getenv("GARMIN_PASSWORD")
-    notion_token = os.getenv("NOTION_TOKEN")
-    database_id = os.getenv("NOTION_DB_ID")
-
-    garmin = Garmin(garmin_email, garmin_password)
-    garmin.login()
-    client = Client(auth=notion_token)
-
-    activities = get_all_activities(garmin)
-
-    for activity in activities:
-        activity_date = activity.get('startTimeGMT')
-        activity_name = format_entertainment(activity.get('activityName', 'Unnamed Activity'))
-        activity_type, activity_subtype = format_activity_type(
-            activity.get('activityType', {}).get('typeKey', 'Unknown'),
-            activity_name
-        )
-
-        existing_activity = activity_exists(client, database_id, activity_date, activity_type, activity_name)
-
-        if existing_activity:
-            if activity_needs_update(existing_activity, activity):
-                update_activity(client, existing_activity, activity)
-        else:
-            create_activity(client, database_id, activity)
-
-if __name__ == '__main__':
-    main()
+# Additional changes throughout your script should include updating any references to "Distance (km)" to "Distance (mi)"
+# and converting the distance using / 1609.34 instead of / 1000.
+# For example:
+# "Distance (mi)": {"number": round(total_distance / 1609.34, 2)}
