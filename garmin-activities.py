@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import pytz
 import os
 
-# Your local time zone, replace with the appropriate one if needed
+# Your local time zone
 local_tz = pytz.timezone('America/Toronto')
 
 ACTIVITY_ICONS = {
@@ -36,7 +36,6 @@ def format_activity_type(activity_type, activity_name=""):
     formatted_type = activity_type.replace('_', ' ').title() if activity_type else "Unknown"
     activity_subtype = formatted_type
     activity_type = formatted_type
-
     activity_mapping = {
         "Barre": "Strength",
         "Indoor Cardio": "Cardio",
@@ -46,24 +45,20 @@ def format_activity_type(activity_type, activity_name=""):
         "Strength Training": "Strength",
         "Treadmill Running": "Running"
     }
-
     if formatted_type == "Rowing V2":
         activity_type = "Rowing"
     elif formatted_type in ["Yoga", "Pilates"]:
         activity_type = "Yoga/Pilates"
         activity_subtype = formatted_type
-
     if formatted_type in activity_mapping:
         activity_type = activity_mapping[formatted_type]
         activity_subtype = formatted_type
-
     if activity_name and "meditation" in activity_name.lower():
         return "Meditation", "Meditation"
     if activity_name and "barre" in activity_name.lower():
         return "Strength", "Barre"
     if activity_name and "stretch" in activity_name.lower():
         return "Stretching", "Stretching"
-
     return activity_type, activity_subtype
 
 def format_entertainment(activity_name):
@@ -90,11 +85,10 @@ def format_training_effect(trainingEffect_label):
 
 def format_pace(average_speed):
     if average_speed > 0:
-        pace_min_km = 1000 / (average_speed * 60)
-        pace_min_mi = pace_min_km / 1.60934
+        pace_min_mi = 1609.34 / (average_speed * 60)  # Convert to min/mi
         minutes = int(pace_min_mi)
         seconds = int((pace_min_mi - minutes) * 60)
-        return f"{minutes}:{seconds:02d}"
+        return f"{minutes}:{seconds:02d} min/mi"
     else:
         return ""
 
@@ -103,9 +97,7 @@ def activity_exists(client, database_id, activity_date, activity_type, activity_
         main_type, _ = activity_type
     else:
         main_type = activity_type[0] if isinstance(activity_type, (list, tuple)) else activity_type
-
     lookup_type = "Stretching" if "stretch" in activity_name.lower() else main_type
-
     query = client.databases.query(
         database_id=database_id,
         filter={
@@ -126,15 +118,13 @@ def activity_needs_update(existing_activity, new_activity):
         new_activity.get('activityType', {}).get('typeKey', 'Unknown'),
         activity_name
     )
-
     has_subactivity = (
         'Subactivity Type' in existing_props and 
         existing_props['Subactivity Type'] is not None and
         existing_props['Subactivity Type'].get('select') is not None
     )
-
     return (
-        existing_props['Distance (km)']['number'] != round(new_activity.get('distance', 0) / 1609.34, 2) or
+        existing_props['Distance (mi)']['number'] != round(new_activity.get('distance', 0) / 1609.34, 2) or
         existing_props['Duration (min)']['number'] != round(new_activity.get('duration', 0) / 60, 2) or
         existing_props['Calories']['number'] != round(new_activity.get('calories', 0)) or
         existing_props['Avg Pace']['rich_text'][0]['text']['content'] != format_pace(new_activity.get('averageSpeed', 0)) or
@@ -160,13 +150,12 @@ def create_activity(client, database_id, activity):
         activity_name
     )
     icon_url = ACTIVITY_ICONS.get(activity_subtype if activity_subtype != activity_type else activity_type)
-
     properties = {
         "Date": {"date": {"start": activity_date}},
         "Activity Type": {"select": {"name": activity_type}},
         "Subactivity Type": {"select": {"name": activity_subtype}},
         "Activity Name": {"title": [{"text": {"content": activity_name}}]},
-        "Distance (km)": {"number": round(activity.get('distance', 0) / 1609.34, 2)},
+        "Distance (mi)": {"number": round(activity.get('distance', 0) / 1609.34, 2)},
         "Duration (min)": {"number": round(activity.get('duration', 0) / 60, 2)},
         "Calories": {"number": round(activity.get('calories', 0))},
         "Avg Pace": {"rich_text": [{"text": {"content": format_pace(activity.get('averageSpeed', 0))}}]},
@@ -180,15 +169,12 @@ def create_activity(client, database_id, activity):
         "PR": {"checkbox": activity.get('pr', False)},
         "Fav": {"checkbox": activity.get('favorite', False)}
     }
-
     page = {
         "parent": {"database_id": database_id},
         "properties": properties,
     }
-
     if icon_url:
         page["icon"] = {"type": "external", "external": {"url": icon_url}}
-
     client.pages.create(**page)
 
 def update_activity(client, existing_activity, new_activity):
@@ -198,11 +184,10 @@ def update_activity(client, existing_activity, new_activity):
         activity_name
     )
     icon_url = ACTIVITY_ICONS.get(activity_subtype if activity_subtype != activity_type else activity_type)
-
     properties = {
         "Activity Type": {"select": {"name": activity_type}},
         "Subactivity Type": {"select": {"name": activity_subtype}},
-        "Distance (km)": {"number": round(new_activity.get('distance', 0) / 1609.34, 2)},
+        "Distance (mi)": {"number": round(new_activity.get('distance', 0) / 1609.34, 2)},
         "Duration (min)": {"number": round(new_activity.get('duration', 0) / 60, 2)},
         "Calories": {"number": round(new_activity.get('calories', 0))},
         "Avg Pace": {"rich_text": [{"text": {"content": format_pace(new_activity.get('averageSpeed', 0))}}]},
@@ -216,15 +201,12 @@ def update_activity(client, existing_activity, new_activity):
         "PR": {"checkbox": new_activity.get('pr', False)},
         "Fav": {"checkbox": new_activity.get('favorite', False)}
     }
-
     update = {
         "page_id": existing_activity['id'],
         "properties": properties,
     }
-
     if icon_url:
         update["icon"] = {"type": "external", "external": {"url": icon_url}}
-
     client.pages.update(**update)
 
 def main():
@@ -233,13 +215,10 @@ def main():
     garmin_password = os.getenv("GARMIN_PASSWORD")
     notion_token = os.getenv("NOTION_TOKEN")
     database_id = os.getenv("NOTION_DB_ID")
-
     garmin = Garmin(garmin_email, garmin_password)
     garmin.login()
     client = Client(auth=notion_token)
-
     activities = get_all_activities(garmin)
-
     for activity in activities:
         activity_date = activity.get('startTimeGMT')
         activity_name = format_entertainment(activity.get('activityName', 'Unnamed Activity'))
@@ -247,9 +226,7 @@ def main():
             activity.get('activityType', {}).get('typeKey', 'Unknown'),
             activity_name
         )
-
         existing_activity = activity_exists(client, database_id, activity_date, activity_type, activity_name)
-
         if existing_activity:
             if activity_needs_update(existing_activity, activity):
                 update_activity(client, existing_activity, activity)
